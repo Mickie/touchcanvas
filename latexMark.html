@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+    <title>latex标注</title>
+    <link rel="stylesheet" href="css/bootstrap.min.css" type="text/css">
+    <style>
+        html,body{
+            margin:0;
+            padding-top:15px;
+        }
+        .canvasContainer{
+            width:100%;
+            height:500px;
+            margin-bottom:30px;
+        }
+        .latexContainer{
+            width:100%;
+            margin-top:30px;
+        }
+        .controlContainer{
+            text-align:center;
+        }
+        #myText{
+            border:1px solid #ddd;
+            border-radius:4px 4px 0 0;
+            width:100%;
+
+        }
+    </style>
+</head>
+<body onload ="loadingReady();">
+    <div class='container'>
+        <div class='canvasContainer'>
+            <canvas id='myCanvas'>your browser does not support canvas element</canvas>
+            <br><br>
+        </div>
+        <div class='controlContainer'>
+            <button type='button' class='btn btn-success btn-lg' id='exportPts'>输出canvas点</button>
+            <button type='button' class='btn btn-info btn-lg' id='inputLatex' style="display:none;">输入latex</button>
+            <button type ='button' class='btn btn-default btn-lg' id='preView' style="display:none;">latex输入预览</button>
+            <button type='button' class='btn btn-info btn-lg' id='back'>撤销一笔</button>
+        </div>
+        <div class='latexContainer' style="display:none;">
+            <input class='input-lg' id='myText'>
+        </div>
+        <div id='outPut' style='margin-top:15px;display:none;'>
+            <span style='margin-right:10px;'>you typed:</span>${}$
+        </div>
+    </div>
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [["$","$"],["\\(","\\)"]]
+    }
+  });
+</script>
+<script type="text/javascript" src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS_HTML-full"></script>
+<script type="text/javascript">
+        var Canvas = function(id){
+            this.el = document.querySelector('#'+id);
+            this.ctx = this.el.getContext('2d');
+            this.el.style.cursor ='pointer';
+            this.lineWidth =0.5;
+            this.strokeStyle = 'black';
+            this.isDown = false;
+            this.mousedown={};
+            this.drawSurface='';
+            this.imgDataArrs=[];
+            this.pts=[];
+            this.oneStroke=[];
+        }
+
+        Canvas.prototype={
+            init:function(){
+               this.setSize();
+               this.saveDrawSurface();
+               this.el.addEventListener('touchstart',this.delegate(this.downHandler,this),false);
+               this.el.addEventListener('touchmove',this.delegate(this.moveHandler,this),false);
+               this.el.addEventListener('touchend',this.delegate(this.upHandler,this),false);
+            },
+            newCanvas:function(){
+               this.mousedown ={};
+               this.isDown = false;
+               this.imgDataArrs.length=0;
+               this.pts.length = 0;
+               this.oneStroke.length = 0;
+               this.clearCanvas();
+               this.saveDrawSurface();
+            },
+            setSize:function(){
+              var par = document.querySelector('.canvasContainer');
+              this.el.width = par.offsetWidth;
+              this.el.height = par.offsetHeight;
+              this.el.style.border= "1px solid #ddd ";
+              this.el.style.borderRadius =" 4px 4px 0 0 ";
+            },
+            delegate:function(func,obj){
+                return function(){
+                    func.apply(obj,arguments);
+                }
+            },
+            drawLine:function(loc){
+                this.ctx.beginPath();
+                this.ctx.strokeStyle = this.strokeStyle;
+                this.ctx.lineWidth = this.lineWidth;
+                this.ctx.moveTo(this.mousedown.x,this.mousedown.y);
+                this.ctx.lineTo(loc.x,loc.y);
+                this.ctx.stroke();
+            },
+            drawText:function(text,loc){
+                this.ctx.font ="1.5em serif";
+                this.ctx.textAlign = "start";
+                this.ctx.textBaseline ="bottom";
+                this.ctx.strokeStyle ='blue';
+                this.ctx.strokeText(text,loc.x,loc.y);
+            },
+            updateMousedown:function(loc){
+                this.mousedown.x=loc.x;
+                this.mousedown.y = loc.y;
+            },
+            saveDrawSurface:function(){
+                this.drawSurface = this.ctx.getImageData(0,0,this.el.width,this.el.height);
+            },
+            restoreDrawSurface:function(){
+                this.ctx.putImageData(this.drawSurface,0,0);
+            },
+            clearCanvas:function(){
+                this.ctx.clearRect(0,0,this.el.width,this.el.height);
+            },
+            savePts:function(pt){
+                this.pts.push(JSON.stringify(pt));
+            },
+            exportPts:function(){
+                if(this.pts.length === 0 ){
+                    return null;
+                }
+                return this.pts;
+            },
+            outPutBase64:function(){
+                return this.el.toDataURL();
+            },
+            backOneStroke:function(){
+                var strokes_len = this.pts.length;
+                if((strokes_len-1)>0){
+                    this.pts.pop();
+                    this.imgDataArrs.pop();
+                    this.clearCanvas();
+                    this.ctx.putImageData(this.imgDataArrs[this.pts.length-1],0,0);
+                    this.saveDrawSurface();
+                }else{
+                    alert('已经到达第一笔咧～');
+                }
+            },
+
+            downHandler:function(e){
+                e.preventDefault();
+                var obj = e.targetTouches[0];
+                var loc ={
+                    'x': (obj.clientX-this.el.offsetLeft).toFixed(),
+                    'y': (obj.clientY-this.el.offsetTop).toFixed()
+                };
+                this.isDown = true;
+                this.restoreDrawSurface();
+                this.updateMousedown(loc);
+                this.saveDrawSurface();
+                this.oneStroke.length=0;
+                this.oneStroke.push(loc);
+            },
+            moveHandler:function(e){
+                e.preventDefault();
+                var obj = e.targetTouches[0];
+                var loc ={
+                    'x': (obj.clientX-this.el.offsetLeft).toFixed(),
+                    'y': (obj.clientY-this.el.offsetTop).toFixed()
+                };
+                if(this.isDown){
+                   this.restoreDrawSurface();
+                   this.drawLine(loc);
+                   this.updateMousedown(loc);
+                   this.saveDrawSurface();
+                   this.oneStroke.push(loc);
+                }
+            },
+            upHandler:function(){
+                if(this.isDown){
+                    this.savePts(this.oneStroke);
+                    var text = this.pts.length;
+                    this.drawText(text,this.oneStroke[0]);
+                    this.saveDrawSurface();
+                    this.imgDataArrs.push(this.drawSurface);
+                }
+                this.isDown = false;
+                this.restoreDrawSurface();
+            }
+        }
+
+    </script>
+<script type="text/javascript">
+    (function(){
+
+        var canvas = new Canvas('myCanvas');
+        canvas.init();
+
+        //latex
+        var QUEUE = MathJax.Hub.queue;
+        var math = null;
+        QUEUE.Push(function(){
+            math = MathJax.Hub.getAllJax("outPut")[0];
+        });
+
+        var exportBtn =  document.querySelector('#exportPts'),
+            preViewBtn = document.querySelector('#preView'),
+            inputBtn = document.querySelector('#inputLatex'),
+            inputMath = document.querySelector('#myText'),
+            backBtn = document.querySelector('#back');
+
+        exportBtn.onclick = function(){
+            var strokes = canvas.exportPts();
+            if(strokes){
+                var fd = new FormData();
+                fd.append('strokes',strokes);
+                fd.append('latex',0);
+                fd.append('image',canvas.outPutBase64());
+                var url = "";
+                var req = createCORSRequest('post',url);
+                if(req){
+                   req.onload = function(){
+                        alert(req.responseText);
+                        canvas.newCanvas();
+                   };
+                   req.onerror = function(){
+
+                   };
+                   req.send(fd);
+                }
+            }else{
+                alert('没画任何东西哟～');
+            }
+        };
+
+        backBtn.onclick = function(){
+            canvas.backOneStroke();
+        }
+
+        function createCORSRequest(method,url){
+            var xhr = new XMLHttpRequest();
+            if('withCredentials' in xhr){
+                xhr.open(method,url,true);
+            }else if(typeof XDomainRequest != "undefined"){ //ie 8
+                xhr = new XDomainRequest();
+                xhr.open(method,url);
+            }else{
+                xhr = null;
+            }
+            return xhr;
+        }
+
+        preViewBtn.onclick = function(){
+            this.setAttribute('class','btn btn-info btn-lg');
+            inputBtn.setAttribute('class','btn btn-default btn-lg');
+            QUEUE.Push(['Text',math,"\\displaystyle{"+inputMath.value+"}"]);
+        };
+        inputBtn.onclick = function(){
+            preViewBtn.setAttribute('class','btn btn-default btn-lg');
+            this.setAttribute('class','btn btn-info btn-lg');
+            inputMath.value = '';
+        };
+        inputMath.onfocus = function(){
+            preViewBtn.setAttribute('class','btn btn-default btn-lg');
+            this.value= '';
+        }
+
+
+        var container = document.querySelector('.container');
+        var loadingMsg = document.createElement('p');
+        loadingMsg.innerText = 'loading...';
+        loadingMsg.style.fontSize = '1em';
+        loadingMsg.style.textAlign = 'center';
+        container.style.display =' none ';
+        document.body.appendChild(loadingMsg);
+        window.loadingReady = function(){
+            document.body.removeChild(loadingMsg);
+            container.style.display='block';
+        }
+    })();
+</script>
+</body>
+</html>
